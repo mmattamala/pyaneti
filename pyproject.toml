@@ -10,7 +10,7 @@ build-backend = "mesonpy"
 
 [project]
 name = "pyaneti"
-version = "2.1.0"
+version = "2.5.0"
 description = "Python wrapper for Pyaneti Fortran core"
 authors = [{ name = "Oscar Barragán" }]
 license = { text = "GPLv3" }
@@ -22,5 +22,10 @@ dependencies = [
     "seaborn",
     "pandas",
     "scipy",
+    "pyastronomy",
+    "tqdm",
+    "emcee",
+    "dynesty",
+    "zeus",
 ]
 

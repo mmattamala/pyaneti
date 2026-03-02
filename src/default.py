@@ -26,10 +26,12 @@ S_Teff = 5772.0  # K
 E_GM_SI = 3.986004e14  # m^3 s^{-2}
 E_radius_e_SI = 6.3781e6         # ecuatorial radius [m]
 E_radius_p_SI = 6.3568e6         # polar radius [m]
+E_den_cgs = 5.51                 #g/cm3
 # Jupiter
 J_GM_SI = 1.2668653e17  # m^3 s^{-1}
 J_radius_e_SI = 7.1492e7         # ecuatorial radius [m]
 J_radius_p_SI = 6.6854e7         # polar radius [m]
+J_den_cgs = 1.33                 #g/cm3
 # Other constants
 AU_SI = 1.4960e11  # m
 # from https://www.cfa.harvard.edu/~dfabricant/huchra/ay145/constants.html
@@ -64,6 +66,8 @@ thin_factor = 10
 niter = 100
 # Number of chains or walkers to be used to exoplore parameter space
 nchains = 100
+#Control parallel runs
+is_parallel_run = True
 
 # Indicate the number of planets to be fitted
 nplanets = 1
@@ -86,16 +90,15 @@ is_log_P = False
 is_ew = False
 # If True, the code sample for impact parameter insted of inclination
 is_b_factor = True
-# If True, the code sample for the stellar density to the 1/3 power (rho^{1/3})
+# If True, the code sample for the stellar density
 # instead of scaled semi major axis
 # for multiplanet fits, it fits, the scaled semi-major axis of all fitted planets
 # are calculated from the fitted stellar density
 #is_den_a is not depreciated, new varialbe is
 sample_stellar_density = False
-is_den_a = False
 # If True, the code sample for log10(k) instead of K
 is_log_k = False
-# NOT WORK NOW! If True, the code sample for log10(v0) instead of v0
+#If True, the code sample for log10(v0) instead of v0
 is_log_rv0 = False
 
 # flat to control paramter priors
@@ -108,7 +111,7 @@ fit_i = ['f']
 fit_a = ['f']
 fit_rp = ['f']
 fit_k = ['f']
-fit_v0 = ['f']
+fit_v0 = 'u'
 fit_q1 = ['f']
 fit_q2 = ['f']
 
@@ -153,10 +156,10 @@ max_rp = [0.99]      # a really big planet
 min_k = [1.e-6]      # m/s amplitudes
 max_k = [30.]     # a really big planet
 
-jtr_prior_flag = []
-jtr_prior_vals = []
-jrv_prior_flag = []
-jrv_prior_vals = []
+jtr_prior_flag = None
+jtr_prior_vals = None
+jrv_prior_flag = None
+jrv_prior_vals = None
 
 # Flag to control single transit fits
 is_single_transit = False
@@ -168,8 +171,6 @@ n_cad = [1]
 # time of integrations in days
 t_cad = [30. / 60. / 24.]
 
-lc_data = 'free'
-
 # bin light curve each bin_lc time (units of days)
 # this is useful for light curve fits with GPs
 bin_lc = 0
@@ -177,16 +178,10 @@ bin_lc = 0
 # New parameters
 nbands = 1
 nldc = 2
-bands = ['']
-
-# Default input columns for light curve file
-# first column -> time
-# second -> flux
-# third ->  flux_error
-columns_tr = [0, 1, 2]
+bands = [None]
 
 # If True, it fits for a jitter term for the light curve data
-is_jitter_tr = False
+is_jitter_tr = True
 
 # If the input file only have two columns, time and flux, we can specify the
 # error bar for the whole data set with this variable
@@ -206,7 +201,7 @@ telescopes = ['telescope']
 telescopes_labels = ['telescope']
 
 # If True, it fits for a jitter term for each instrument
-is_jitter_rv = False
+is_jitter_rv = True
 # if we want to assign the jitter term fitting in a different way than the nominal
 # one, we can specify it with the is_special_jitter flag
 # if true, it will take a fifth column in the RV data file, in which the labels
@@ -215,13 +210,17 @@ is_jitter_rv = False
 is_special_jitter = False
 jrvvec = []
 
+#Control to check if pyaneti will run Float Chunk Offset method automatically
+is_run_fco = False
+#choose the window for the chunks in days
+fco_window = 0.5 #days
+
 
 # ----------------------------------------------------------------
 #          Gaussian Process controls
 # ----------------------------------------------------------------
 kernel_rv = 'None'
 kernel_tr = 'None'
-
 
 # ----------------------------------------------------------------
 #                     PLOT CONTROLS
@@ -234,7 +233,7 @@ is_plot_prior = True
 # how many colums do we want in the posterior plot?
 n_columns_posterior = 3
 # If True it creates a correlation plot
-is_plot_correlations = False
+is_plot_correlations = True
 # If True it creates a iterations vs chains plot
 is_plot_chains = True
 # If True it creates a corner plot and the posterior and correlation plots are not created
@@ -243,14 +242,23 @@ is_corner_plot = False
 # OSCAR: more description on how to use it is needed
 plot_parameters = []
 # If True, it will create the plots using seaborn library
-is_seaborn_plot = False
+is_seaborn_plot = True
 # Default color palette for seaborn plots
 # More details about palettes at https://seaborn.pydata.org/tutorial/color_palettes.html
 seaborn_palette = 'deep'
+#Context in which papers are created, paper, notebook, talk, poster
+seaborn_context = 'paper'
+#Seaborn style, options are darkgrid, whitegrid, dark, white, ticks
+seaborn_style = 'ticks'
 # Do we want rasterized pdf plots
 is_rasterized = True
 #Do we want to plot the correlations using a seaborn kernel?
 plot_kde_correlations = False
+#Color controls for the posterior and correlation plots
+posterior_color = '#005ab3'
+interval_color = '#5ab300'
+prior_color = '#FFA500'
+correlation_cmap = 'Blues'
 
 # Figure size default, python takes inches by default
 figure_size_x = 23./2.56  # 23cm
@@ -258,37 +266,6 @@ figure_size_y = 23./2.56/1.618
 # Font size label for the plots
 font_size_label = 18
 
-# TRANSIT PLOTS
-
-# If True, it plots each individual transit with the fit model
-# For multiplanet fits, this variable has to have N elemens are N planets we are fitting
-is_plot_all_tr = [False]
-# If True it plots percentiles in the phase pholded Transit plot
-is_special_plot_tr = False
-# If True, it overplots an unbinned model in the light curve model
-plot_unbinned_model = False
-# If True, it overplots an unbinned model in the light curve model
-plot_binned_data = False
-# If True, the transit plot will have each data point with an error bar
-# If False, all points will be filled circles with the error bar size showed in the down right corner
-plot_tr_errorbars = False
-# If True, the stardard deviation of the residuals is shown in the transit plot
-is_plot_std_tr = False
-
-# If is_jitter_tr = True, the error bar size will be changed in the plot accordingly
-resize_tr = True
-# We can select the window size for the transit plot, it has to be given in units of days
-# For multiplanet fits, this variable has to have N elemens are N planets we are fitting
-span_tr = [0.0]
-# if True, we can select the window size for the tr plot given y_lim_min and y_lim_max
-select_y_tr = False
-# if select_y_tr = True, is the maximum limit for the tr plot
-y_lim_max = 1.05
-# if select_y_tr = True, is the minimum limit for the tr plot
-y_lim_min = 0.95
-# When creating timeseries plot of light curve data, the code performs a sigma clipping
-# algorithm to remove outliers, default sigma is 10, but it can be changed
-sigma_clean = 10
 # Label to appear in the timeseries plot of the light curve
 tr_xlabel = "BJD - 2450000 (days)"
 
@@ -302,43 +279,37 @@ tbin = 1./6.
 # RV PLOTS
 
 #RVlabels and residuals
-rv_labels = ['RV (m/s)']
-rv_res = ['Residuals (m/s)']
+rv_labels = [r'RV ($\mathrm{m\,s^{-1}}$)']
+rv_res = [r'Residuals ($\mathrm{m\,s^{-1}}$)']
 
 # If is_jitter_rv = True, the error bar size will be changed in the plot accordingly
 # The jitter term is displayed as a gray extension to the nominal error bars
 resize_rv = True
 
-# if True, we can select the window size for the tr plot given rv_lim_min and rv_lim_max
-select_y_rv = False
 # Label to appear in the RV timeseries plot
 rv_xlabel = "BJD - 2450000 (days)"
+#Label to appear in the RV timeseries, each element will be a different label for each timeseries in multi-GP fits
+rv_ylabel = [r'RV ($\mathrm{m\,s^{-1}}$)']*5
 # if True, the RV plots contain a legend indicating the color and symbol of each instrument
 is_rv_legend = True
 # Default markers for the different instruments of the RV plots
 mark = ['o', 'D', 's', 'p', 'h', '8', '^',
         '<', '*', 'v', '>', '.', 'H', 'd', '+']
 # Default colors for the different instruments of the RV plots
-rv_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
-
+rv_colors = ['C0','C1','C2','C3','C4','C5','C6','C7']
 # marker size for the data points of the RV plot
 rv_markersize = 8
-# Type of marker in the RV plot
-rv_fillstyle = 'full'
 
-#Control if we want to plot the standard deviation of the models in the phase_folded_plotoutpy/TOI-560-full_out
-#Default is false
-plot_rv_std = False
 
 # ----------------------------------------------------------------
 #                     OTHER CONTROLS
 # ----------------------------------------------------------------
 
-# unit_mass controls the units in which the planet parameters are displayed
+# planetary_units controls the units in which the planet parameters are displayed
 # 'solar' prints it in solar units
 # 'earth' prints it in Earth units
 # 'jupiter' prints it in Jupiter units
-unit_mass = 'solar'
+planetary_units = 'solar'
 
 # if True, it will print the mode and 99% limits of the credible interval distribution
 is_print_mode = False
@@ -353,21 +324,17 @@ is_clustering = True
 #clustering_sigma away from the mean of the main group of chains
 clustering_sigma = 3.
 #If save_clustered_chains is True, then pyaneti will save a file with the chains that survive the clustering
-save_clustered_chains= False
-
-# If True, the code creates authomatic priors for the RV offests
-# And also checks for maximum values for Rp/R*
-# BE AWARE THAT If False, the code may not work!
-is_smart_priors = True
+save_clustered_chains= True
 
 # If True, it creates a LaTeX file with all fitted and derived parameters
 latex_values = True
+extra_latex = ''
 
 # Default output directory is outpy, this can be changed with outdir variable
 outdir = 'outpy/'
 
 # For a joint fit, in the case in which RV and Light curve data have not the same
-# units of time, the variable textra adds a constant time to the light curve time
+# offset of time, the variable textra adds a constant time to the light curve time
 # series in order to match both time sets.
 # Example:
 # if RV data is given in BJD - 2,450,000 and
@@ -387,3 +354,4 @@ gprv_labels = []
 # 'median' -> it uses the median
 # 'mode' -> it uses the mode
 get_value = 'median'
+

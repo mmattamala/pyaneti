@@ -25,19 +25,21 @@ implicit none
   real(kind=mireal), intent(out), dimension(0:ts-1) :: z
 !Local variables
   real(kind=mireal), dimension(0:ts-1) :: ta, swt
-  real(kind=mireal) :: tp, P, e, w, i, a
+  real(kind=mireal) :: t0, P, e, w, i, a
   real(kind=mireal) :: si
-!
 
-  tp  = pars(0)
+
+  t0  = pars(0)
   P   = pars(1)
   e   = pars(2)
   w   = pars(3)
   i   = pars(4)
   a   = pars(5)
 
-  !Obtain the true anomaly by using find_anomaly_tp
-  call find_anomaly_tp(t,tp,e,P,ta,ts)
+
+  !Obtain the true anomaly
+  call find_anomaly(t,t0,e,w,P,ta,ts)
+
 
   swt = sin(w+ta)
   si = sin(i)
@@ -83,104 +85,95 @@ implicit none
       !If we are fitting only one band, let's call the routine that computes it faster
     if ( nbands == 1 ) then
       call flux_tr_singleband_nobin(xd,pars,rps,ldc,n_data,npl,flux_out)
-    !Let's  call the complicated multiband function
+    !Let's  call the multiband function
     else
       call flux_tr_multiband_nobin(xd,trlab,pars,rps,ldc,nbands,nradius,n_data,npl,flux_out)
     end if
   end if
 
+  where (flux_out > 1.0) flux_out = 1.0
+
 end subroutine
 
-subroutine flux_tr_multiband(xd,trlab,pars,rps,ldc,&
-           n_cad,t_cad,nbands,nradius,n_data,npl,flux_out)
+subroutine flux_tr_multiband(xd, trlab, pars, rps, ldc, &
+           n_cad, t_cad, nbands, nradius, n_data, npl, flux_out)
 use constants
 implicit none
 
-!In/Out variables
-  integer, intent(in) :: n_data, npl, nbands, nradius
-  integer, intent(in) :: n_cad(0:nbands-1)
-  real(kind=mireal), intent(in), dimension(0:n_data-1)  :: xd
-  integer, intent(in), dimension(0:n_data-1)  :: trlab !this indicates the instrument label
-  real(kind=mireal), intent(in), dimension(0:5,0:npl-1) :: pars
-  real(kind=mireal), intent(in), dimension(0:nradius*npl-1) :: rps
-!  real(kind=mireal), intent(in), dimension(0:nbands-1,0:npl-1) :: rps
-  !pars = T0, P, e, w, b, a/R*, Rp/R*
-  real(kind=mireal), intent(in) :: t_cad(0:nbands-1)
-  real(kind=mireal), intent(in), dimension (0:2*nbands-1) :: ldc
-  real(kind=mireal), intent(out), dimension(0:n_data-1) :: flux_out !output flux model
-!Local variables
-  real(kind=mireal) :: npl_dbl, u1(0:nbands-1), u2(0:nbands-1)
-  real(kind=mireal), allocatable, dimension(:)  :: flux_unbinned
-  real(kind=mireal)   :: flux_binned
-  real(kind=mireal), allocatable, dimension(:)  :: t_unbinned, z
-  integer :: i, n, j, control, lj, n_cadj
-  integer, allocatable :: k(:)
+! In/Out variables
+integer, intent(in) :: n_data, npl, nbands, nradius
+integer, intent(in) :: n_cad(0:nbands-1)
+real(kind=mireal), intent(in), dimension(0:n_data-1)  :: xd
+integer, intent(in), dimension(0:n_data-1)  :: trlab ! This indicates the instrument label
+real(kind=mireal), intent(in), dimension(0:5,0:npl-1) :: pars
+real(kind=mireal), intent(in), dimension(0:nradius*npl-1) :: rps
+real(kind=mireal), intent(in) :: t_cad(0:nbands-1)
+real(kind=mireal), intent(in), dimension(0:2*nbands-1) :: ldc
+real(kind=mireal), intent(out), dimension(0:n_data-1) :: flux_out ! Output flux model
 
-  !This flag controls the multi-radius fits
-  control = 1
-  if (nradius == 1) control = 0
+! Local variables
+real(kind=mireal) :: npl_dbl, u1(0:nbands-1), u2(0:nbands-1)
+real(kind=mireal) :: flux_binned
+integer :: i, n, j, lj, n_cadj
+integer :: max_ncad
+integer :: control
 
-  npl_dbl = dble(npl)
+! Declare and allocate memory for the largest possible size needed
+real(kind=mireal), allocatable, dimension(:)  :: flux_unbinned, t_unbinned, z
+integer, allocatable, dimension(:)  :: k
 
+! Determine the maximum size needed for the arrays
+max_ncad = MAXVAL(n_cad)
 
-  do n = 0, nbands - 1
-    u1(n) = ldc(2*n)
-    u2(n) = ldc(2*n+1)
-  end do
+allocate(flux_unbinned(0:max_ncad-1), t_unbinned(0:max_ncad-1), z(0:max_ncad-1), k(0:max_ncad-1))
 
-  flux_out = 1.d0
+! This flag controls the multi-radius fits
+control = 1
+if (nradius == 1) control = 0
 
+npl_dbl = dble(npl)
+
+do n = 0, nbands - 1
+  u1(n) = ldc(2*n)
+  u2(n) = ldc(2*n+1)
+end do
+
+flux_out = 1.d0
+
+do j = 0, n_data - 1
   do n = 0, npl - 1
+    ! Variable with the current telescope label
+    lj = trlab(j)
+    n_cadj = n_cad(lj)
 
-    do j = 0, n_data - 1
+    k(:n_cadj-1) = (/(i, i=0,n_cadj-1, 1)/)
+    ! Calculate the time-stamps for the binned model
+    t_unbinned(:n_cadj-1) = xd(j) + t_cad(lj)*((k(:n_cadj-1)+1.d0)-0.5d0*(n_cadj+1.d0))/n_cadj
 
-      !variable with the current telescope label
-      lj = trlab(j)
-      n_cadj = n_cad(lj)
+    ! Each z is independent for each planet
+    call find_z(t_unbinned(0:n_cadj-1), pars(0:5,n), z(0:n_cadj-1), n_cadj)
 
-      !Let us allocate memory in a smart way
-      !If the previous point was the same telescope label, then the arrays have
-      !the same dimensions, and we no need to allocate new memory
-      if ( j < 1 .or. (j > 0 .and. (trlab(j-1) .ne. lj ) ) ) then !we need to allocate
+    if (ALL(z(0:n_cadj-1) > 1.d0 + rps(n*nradius+lj*control)) .or. rps(n*nradius+lj*control) < small) then
+      flux_out(j) = flux_out(j) * 1.d0
+    else
+      ! Now we have z, let us use Agol's routines
+      call occultquad(z(0:n_cadj-1), u1(lj), u2(lj), rps(n*nradius+lj*control), flux_unbinned(0:n_cadj-1), n_cadj)
 
-        allocate(flux_unbinned(0:n_cadj-1),t_unbinned(0:n_cadj-1),z(0:n_cadj-1),k(0:n_cadj-1))
+      ! Bin the model if needed
+      flux_binned = SUM(flux_unbinned(0:n_cadj-1)) / n_cadj
 
-      end if
-
-      k(:) = (/(i, i=0,n_cadj-1, 1)/)
-      !Calculate the time-stamps for the binned model
-      t_unbinned(:) = xd(j) + t_cad(lj)*((k(:)+1.d0)-0.5d0*(n_cadj+1.d0))/n_cadj
-
-      !Each z is independent for each planet
-      call find_z(t_unbinned,pars(0:5,n),z,n_cadj)
-
-      if ( ALL( z > 1.d0 + rps(n*nradius+lj*control) ) .or. rps(n*nradius+lj*control) < small ) then
-
-        flux_out(j) = flux_out(j) * 1.d0
-
-      else
-
-        !Now we have z, let us use Agol's routines
-        call occultquad(z,u1(lj),u2(lj),rps(n*nradius+lj*control),flux_unbinned,n_cadj)
-        !!!!!call qpower2(z,rp(n),u1,u2,flux_ub(:,n),n_cad)
-
-        !Bin the model if needed
-        flux_binned = SUM(flux_unbinned)/n_cadj
-
-	!Compute the final flux
-        flux_out(j) = flux_out(j) * flux_binned
-
-      end if
-
-      !The memory is deallocated only if the upcoming point is a new telescope label
-      !or if we have reached the number of iterations
-      if ( lj .ne. trlab(j+1) .or. j + 1 == n_data ) deallocate(flux_unbinned,t_unbinned,z,k)
-
-    end do
-
+      ! Compute the final flux
+      flux_out(j) = flux_out(j) * flux_binned
+    end if
   end do
+end do
+
+! Deallocate memory at the end
+deallocate(flux_unbinned, t_unbinned, z, k)
 
 end subroutine
+
+
 
 
 !This subroutine computes the flux of a star with transiting planets for different bands
@@ -390,6 +383,8 @@ implicit none
     res(:) = res(:) / sqrt( errs(:)**2 + jtr(jtrlab(:))**2 )
     chi2 = dot_product(res,res)
 
+    if (chi2 /= chi2) chi2 = huge(0.d0)
+
 
 end subroutine
 
@@ -428,12 +423,14 @@ implicit none
   a   = pars(5,:)
 
   if (flag(0)) P = 1.d0**pars(1,:)
-  if (flag(1)) call ewto(e,w,e,w,npl)
+  if (flag(1)) then
+    if ( any(e > small) .or. any(w > small) ) call ewto(e,w,e,w,npl)
+  end if
   if (flag(3)) call rhotoa(a(0),P(:),a(:),npl)
   if (flag(2)) call btoi(i,a,e,w,i,npl)
 
 
-  !Update limb darkening coefficients, pass from q's to u's
+  !flag to check if the parameters are within physical constrains (physics > priors)
   is_good = .true.
 
   do n = 0, nbands - 1
@@ -450,12 +447,9 @@ implicit none
 
   if ( is_good ) then
 
-    do n = 0, npl - 1
-      call find_tp(t0(n),e(n),w(n),P(n),tp(n))
-    end do
 
-    !At this point the parameters to fit are tp,P,e,w,i,a without parametrization
-    up_pars(0,:) = tp
+    !At this point the parameters to fit are t0,P,e,w,i,a without parametrization
+    up_pars(0,:) = t0
     up_pars(1,:) = P
     up_pars(2,:) = e
     up_pars(3,:) = w

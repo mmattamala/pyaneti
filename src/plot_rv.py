@@ -1,275 +1,338 @@
-# ===========================================================
-#                   RV PLOTS
-# ===========================================================
-# ===========================================================
-#        Plot RV timeseries
-# ===========================================================
+import scipy.stats as stats
+
+#--------------------------------------------------------------------------------
+#                  Radial velocity timeseries
+#--------------------------------------------------------------------------------
+
+def compute_full_rv_model(x,df_vec,planet_labels=plabels[:nplanets]):
+
+    #Get the parameters
+    f = np.zeros(shape=(len(x)))
+    for p in planet_labels:
+        f += pti.rv_curve_mp(x,0.0, df_vec[f't0{p}'],df_vec[f'p{p}'],df_vec[f'e{p}'],df_vec[f'omega{p}'],df_vec[f'k{p}'],0,0)
+    f += (x-x[0])*df_vec['linear_trend'] + (x-x[0])**2*df_vec['quadratic_trend']
+    return f
+
+def compute_rv_model_notrends(x,df_vec,planet_labels=plabels[:nplanets]):
+
+    #Get the parameters
+    f = np.zeros(shape=(len(x)))
+    for p in planet_labels:
+        f += pti.rv_curve_mp(x,0.0, df_vec[f't0{p}'],df_vec[f'p{p}'],df_vec[f'e{p}'],df_vec[f'omega{p}'],df_vec[f'k{p}'],0,0)
+    return f
+
+def compute_gp_model(x,df_vec,pred_dl):
+
+    jitter_values = np.array(df_vec[rv_jitter_names])
+
+    if kernel_rv[0:2] in ['MQ', 'SQ', 'ME', 'MM']: #multi-GP run
+        m, C = pti.pred_gp_multigp(kernel_rv,df_vec[krv_labels],rv_time,rv_noplanets,
+                       rv_errs,x,jitter_values,jrvlab,dim_lab,pred_dl)
+    else: #Normal GP run
+        m, C = pti.pred_gp(kernel_rv,df_vec[krv_labels],rv_time,rv_noplanets,
+                       rv_errs,x,jitter_values,jrvlab)
+
+    return m, C
 
 
-def plot_rv_timeseries():
-    # -------------------------------------------------------------------------------
-    # Convert factor from km to m
-    cfactor = float(1.e3)
-    data_rv_inst = [None]*nt
-    data_erv_inst = [None]*nt
-    for i in range(0, nt):
-        data_rv_inst[i] = list(rv_all[i])
-        data_erv_inst[i] = list(errs_all[i])
-# -------------------------------------------------------------------------------
-    # CREATE MODEL TO PLOT
-    # MODEL LENGHT IS THE WHOLE RANGE +/- 10%
-    xmin = min(np.concatenate(time_all))
-    xmax = max(np.concatenate(time_all))
-    total_tt = int(xmax - xmin)
-    add = total_tt*0.1
-    xmax = xmax + add
-    xmin = xmin - add
-    n = total_tt*100
-    if (n > 5000):
-        n = 5000
-    # CREATE TIME VECTOR
-    rvx = np.arange(xmin, xmax, (xmax-xmin)/n)
-    # COMPUTE MODEL WITH ALL THE PLANETS
-    rvy = pti.rv_curve_mp(rvx, 0.0, t0_val, P_val,
-                          e_val, w_val, k_val, alpha_val, beta_val)
-# -------------------------------------------------------------------------------
-    # CORRECT DATA FOR EACH SPECTROGRAPH OFFSET
-    rv_no_offset = [None]*nt
-    rv_residuals = [None]*nt
-    for j in range(0, nt):
-        # Remove the compute offset for instrument j
-        rv_no_offset[j] = np.asarray(data_rv_inst[j] - v_val[j])
-        # Store the model with the planets to compute the residuals for instrument j
-        rv_residuals[j] = pti.rv_curve_mp(time_all[j], 0.0, t0_val,
-                                           P_val, e_val, w_val, k_val,alpha_val, beta_val)
-        # Compute the residuals for the instrument j
-        rv_residuals[j] = np.asarray(rv_no_offset[j] - rv_residuals[j])
-# -------------------------------------------------------------------------------
-    if kernel_rv[0:2] == 'MQ' or kernel_rv[0:2] == 'ME' or kernel_rv[0:2] == 'MM' or  kernel_rv[0:2] == 'SQ':
-        # How many timeseries do we have?
-        #ns = int((len(fit_krv) - 3)/2)
-        ns = int(kernel_rv[2])
-        # This vector contains all the timeseries (a TxN vector)
-        xvec = rv_time
-        # This vector contains the predicted timeseries for N cases
-        rvx_tot = np.concatenate([rvx]*ns)
-        # Let us create our vector with the residuals for the N timeseries
-        yvec = [None]*len(rv_vals)
-        # Our first chunk of timeseries is always the RV, in this case, we have to
-        # Create the residuals once removed the planet signals
-        yvec_noplanet = np.concatenate(rv_no_offset)
-        yvec_planet = np.concatenate(rv_residuals)
-        #The first elements of the array correspond to the GP, so we want the vector with no planets and no offset
-        for i in range(int(len(rv_vals)/ns)):
-            yvec[i] = yvec_planet[i]
-        # Now, let us store the ancilliary data vectors, so we want to remove only the offsets
-        for i in range(int(len(rv_vals)/ns), int(len(rv_vals))):
-            yvec[i] = yvec_noplanet[i]
-        evec = rv_errs
-        # Now, predict the GP for all the timeseries
-        m, C = pti.pred_gp(kernel_rv, pk_rv, xvec, yvec,
-                           evec, rvx_tot, jrv, jrvlab)
-        # Let us remove the GP model from the data
-        m_gp, C_gp = pti.pred_gp(
-            kernel_rv, pk_rv, xvec, yvec, evec, xvec, jrv, jrvlab)
-        #Now we can remove the GP model to the data
-        yvec = yvec - m_gp
-        # -----------------------------------------------------------------------------------
-        # Let us create random samples of data
-        if False:
-            nsamples = 1000
-            for j in range(0, nsamples):
-                # Create the Gaussian samples
-                y_dummy = np.random.normal(yvec, evec, len(yvec))
-                out_f = outdir+'/'+star+'_rv_'+str(j)+'.dat'
-                opars = open(out_f, 'w')
-                for k in range(0, len(yvec)):
-                    opars.write('%4.7f %4.7f %4.7f %s \n' % (
-                        xvec[k], y_dummy[k], evec[k], telescopes[tlab[k]]))
-                opars.close()
-        # -----------------------------------------------------------------------------------
-        #
-        # Let us create the vectors that we will use for the plots
-        plot_vector = [None]*ns
-        nts = len(rvx)
-        # This corresponds to the RV timeseries
-        plot_vector[0] = [rvx, (rvy)*cfactor, m[0:nts]
-                          * cfactor, (rvy+m[0:nts])*cfactor,np.sqrt(np.matrix.diagonal(C[0:nts,0:nts]))*cfactor]
-        for i in range(1, ns):
-            plot_vector[i] = [rvx, m[i*nts:(i+1)*nts]*cfactor,np.sqrt(np.matrix.diagonal(C[i*nts:(i+1)*nts,i*nts:(i+1)*nts]))*cfactor]
-    # are we plotting a GP together with the RV curve
-    elif kernel_rv[0:2] != 'No':
-        xvec = rv_time
-        yvec = np.concatenate(rv_residuals)
-        evec = rv_errs
-        m, C = pti.pred_gp(kernel_rv, pk_rv, xvec,
-                           yvec, evec, rvx, jrv, jrvlab)
-        rv_mvec = [rvx, (rvy)*cfactor, m*cfactor, (rvy+m)*cfactor]
-        model_labels = ['Planetary signal', 'GP', 'P+GP']
-        mcolors = ['r', 'b', 'k']
-        malpha = [0.7, 0.7, 0.9]
+def standardize_data(data, errors):
+    """
+    Standardize the data by subtracting the mean and dividing by the error bars.
+    """
+    standardized_data = data #- np.mean(data) / errors
+    return standardized_data
+
+def normality_test(data, errors,ftw):
+    """
+    Perform tests on the standardized data to check for consistency with a standard normal distribution.
+    """
+    standardized_data = standardize_data(data, errors)
+
+    #ks_statistic, p_value = stats.kstest(data, 'norm')
+    #print(f'p_value ks_test {p_value}')
+    ks_statistic, p_value = stats.shapiro(data)
+    #print(f'p_value sh_test {p_value}')
+
+    #print(f"KS Statistic: {ks_statistic}")
+    #print(f"P-value: {p_value}")
+
+    if p_value > 0.05:
+        ftw.write(f"#Residuals are consistent with normal with p_value Shapiro test of {p_value:2.6e} \n")
     else:
-        rv_mvec = [rvx, (rvy)*cfactor]
-        model_labels = ['Full model']
-        mcolors = ['k']
-        malpha = [1.]
+        ftw.write(f"#Residuals are NOT consistent with normal with p_value Shapiro test of {p_value:2.6e} \n")
 
-    # Name of plot file
+    return ks_statistic, p_value
+
+#Let us compute the error bars with jitter term
+rv_errs_jit = np.array(rv_errs)
+for i,t in enumerate(rv_jitter_labels):
+    ix = i == np.array(jrvlab)
+    rv_errs_jit[ix] = np.sqrt(df_medians[f'rv_jitter{rv_jitter_labels[i]}']**2 + rv_errs_jit[ix]**2)
+
+#Let's do plots for the nomical case with no GPs
+if kernel_rv == 'None':
+
+    plt.figure(1, figsize=(fsx, fsy/2))
+
+
+    #Remove offsets
+    rv_no_offset = np.array(rv_vals)
+    #Let us remove the offsets
+    for i,t in enumerate(telescopes_labels):
+        ix = i == np.array(tlab)
+        rv_no_offset[ix] -= df_medians[f'{t}']
+
+
+    local_rv = np.array(rv_no_offset)
+    local_time = np.array(rv_time)
+    local_errs = np.array(rv_errs)
+
+    #Compute planet models
+    npoints = int(local_time.max() - local_time.min())*24
+    if npoints > 5000: npoints = 5000
+    xmodel = np.linspace(min(rv_time)-3, max(rv_time)+3,npoints)
+    rvmodel = compute_full_rv_model(xmodel,df_medians)
+    rvsamples = []
+    for i in range(n_samples):
+        rvsamples.append(compute_full_rv_model(xmodel,df_samples.iloc[i]))
+
+    #Remove planets
+    rv_noplanets = local_rv - compute_rv_model_notrends(local_time,df_medians)
+    #residuals to be used in the phase folded plots, remove any remaining trend
+    rv_presiduals = rv_noplanets - (local_time-local_time[0])*df_medians['linear_trend'] - (local_time-local_time[0])**2*df_medians['quadratic_trend']
+
+    for i,t in enumerate(telescopes_labels):
+        ix = i == np.array(tlab)
+        plt.errorbar(local_time[ix],rv_no_offset[ix]*1e3,rv_errs_jit[ix]*1e3,fmt='.',color=rv_colors[i],alpha=0.5,zorder=5)
+        plt.errorbar(local_time[ix],rv_no_offset[ix]*1e3,local_errs[ix]*1e3,fmt=mark[i],mfc='w',label=t,color=rv_colors[i],zorder=5)
+    plt.plot(xmodel,rvmodel*1e3,'k-')
+    for i in range(n_samples):
+        plt.plot(xmodel,rvsamples[i]*1e3,'k',alpha=0.05,lw=0.5,zorder=4)
+    if is_rv_legend: plt.legend()
+    plt.xlim(xmodel.min(),xmodel.max())
+    plt.xlabel(rv_xlabel)
+    plt.ylabel(r'RV ($\mathrm{m\,s^{-1}}$)')
+
+    #Save the file with the models
+    dname = f'{outdir}/timeseries_rv_model.dat'
+    with open(dname,'w') as f:
+        f.write(f'#Time rv_model   \n')
+        for k in range(len(xmodel)):
+            f.write(f'{xmodel[k]}  {rvmodel[k]}  \n')
+
+    #Save the file with the data
+    dname = f'{outdir}/timeseries_rv_data.dat'
+    with open(dname,'w') as f:
+        f.write(f'#time rv_no_offset rv_err rv_jit_err rv_res label \n')
+        #Perform KS-test to check if the residuals are consistent with a Gaussian distribution
+        #ks_statistic, p_value = normality_test(rv_presiduals,rv_errs_jit,f)
+        for k in range(len(local_time)):
+            f.write(f'{local_time[k]} {rv_no_offset[k]} {local_errs[k]}  {rv_errs_jit[k]} {rv_presiduals[k]} {telescopes_labels[tlab[k]]}  \n')
+
+
     fname = outdir+'/'+star+'_rv_timeseries.pdf'
-    # Name of residuals file
-    out_f = outdir+'/'+star+'_rv_residuals.dat'
+    print(f'Creating  {fname}')
+    plt.savefig(fname, format='pdf', bbox_inches='tight',dpi=300)
+    plt.savefig(fname[:-3]+'png', format='png', bbox_inches='tight', dpi=300)
+    plt.close()
 
-    # Create the vectors to be used in create_nice_plot()
-    vec_x = np.concatenate(time_all)
-    #yvec_noplanet = np.concatenate(rv_residuals)
-    vec_y = np.concatenate(rv_residuals)
-    if kernel_rv[0:2] == 'MQ' or kernel_rv[0:2] == 'ME' or kernel_rv[0:2] == 'MM' or kernel_rv[0:2] == 'SQ':
-        vec_y = np.array(yvec)
-    vec_z = np.concatenate(new_errs_all)/cfactor
+else:
+
+    #Let us find how many dimensions are we dealing with
+    ndim = len(set(dim_lab))
+
+    #Remove offsets for all the timeseries
+    rv_no_offset = np.array(rv_vals)
+    #Let us remove the offsets
+    for i,t in enumerate(telescopes_labels):
+        ix = i == np.array(tlab)
+        rv_no_offset[ix] -= df_medians[f'{t}']
+
+    local_time = np.array(rv_time)
+    local_errs = np.array(rv_errs)
+
+    #Remove planets for dimension 0
+    id0 = dim_lab == 0
+    rv_noplanets = np.array(rv_no_offset)
+    rv_noplanets[id0] -= compute_full_rv_model(local_time[id0],df_medians)
+    #Now we have a vector of residials with no planets and no offsets for activity indicators
+
+    #Let us compute the GP model at for the observations
+    m_data, C_data = compute_gp_model(local_time,df_medians,dim_lab)
+    #Now lete us compute the predictive continuous model
+    #Compute planet models
+    npoints = int(local_time.max() - local_time.min())*24
+    if npoints > 5000: npoints = 5000
+    xmodel = np.linspace(min(rv_time)-3, max(rv_time)+3,npoints)
+    rvmodel = compute_full_rv_model(xmodel,df_medians)
+    #Now let us create the time vector that we will pass to the function to compute the multi-GP
+    xgp = []
+    lgp = []
+    for i in range(ndim):
+        xgp.extend(xmodel)
+        lgp.extend([i]*len(xmodel))
+    #time containing timeseries stamps for each dimension xgp = xmodel*ndim
+    xgp = np.array(xgp)
+    #dimension labels that correspond to the xgp stamps
+    lgp = np.array(lgp)
+    #Compute the full model
+    m_model, C_model = compute_gp_model(xgp,df_medians,lgp)
+
+    #plotting time
+    plt.figure(1, figsize=(fsx, ndim*fsy/2))
+    gs = gridspec.GridSpec(nrows=ndim, ncols=1)
+    gs.update(hspace=0.00)
+    ax = [None]*ndim
+    for i in range(ndim):
+        ax[i] = plt.subplot(gs[i],rasterized=is_rasterized)
+        #dimension indices for the data
+        idx = dim_lab == i
+        #dimension indices for the model
+        idm = lgp == i
+        #Let us do a plot for each time-series
+        #Plot the data, for each telescope
+        for j,t in enumerate(telescopes_labels):
+            ix = j == np.array(tlab) #Let us extract the indices for the current telescope
+            ix = np.logical_and(ix,idx) #let us extract the index of the telescope and the valid dimension index
+            if all(ix == False): continue #if there is no telescope in currect dimension we avoid the plot
+            ax[i].errorbar(local_time[ix],rv_no_offset[ix]*1e3,rv_errs_jit[ix]*1e3,fmt='.',color=rv_colors[j],alpha=0.5,zorder=5)
+            ax[i].errorbar(local_time[ix],rv_no_offset[ix]*1e3,local_errs[ix]*1e3,fmt=mark[j],mfc='w',label=t,color=rv_colors[j],zorder=5)
+        ymodel = m_model[idm]
+        if i == 0: #We add the planetary model
+            ymodel +=  rvmodel
+            ax[i].plot(xmodel,rvmodel*1e3,'-',color='r',alpha=1,label='Keplerians')
+            rv_presiduals = rv_noplanets[idx] - m_data[idx]
+        #Plot the model
+        ax[i].plot(xgp[idm],ymodel*1e3,'-',color='k',label='GP model')
+        std_model = np.sqrt(np.diagonal(C_model)[idm])
+        ax[i].fill_between(xgp[idm],(ymodel-1*std_model)*1e3,(ymodel+1*std_model)*1e3,color='k',alpha=0.1,lw=0,zorder=1)
+        ax[i].fill_between(xgp[idm],(ymodel-2*std_model)*1e3,(ymodel+2*std_model)*1e3,color='k',alpha=0.1,lw=0,zorder=1)
+        #
+        ax[i].set_xlim(xmodel.min(),xmodel.max())
+        ax[i].set_ylabel(rv_ylabel[i])
+        if is_rv_legend: ax[i].legend()
+        if i == ndim - 1:
+            ax[i].set_xlabel(rv_xlabel)
+        else:
+            ax[i].set_xticks([])
+        #
+        #Save the file with the models
+        dname = f'{outdir}/timeseries_dim{i}_model.dat'
+        with open(dname,'w') as f:
+            if i == 0:
+                f.write(f'#Time Full_model std_model GP_model rv_model   \n')
+                for k in range(len(xgp[idm])):
+                    f.write(f'{xgp[idm][k]} {ymodel[k]} {std_model[k]} {m_model[idm][k]} {rvmodel[k]}  \n')
+            else:
+                f.write(f'#Time GP_model std_model residuals  \n')
+                for k in range(len(xgp[idm])):
+                    f.write(f'{xgp[idm][k]} {ymodel[k]} {std_model[k]} \n')
+        #Save the file with the data
+        dname = f'{outdir}/timeseries_dim{i}_data.dat'
+        with open(dname,'w') as f:
+            if i == 0:
+                f.write(f'#time rv_no_offset rv_err  rv_jit_err rv_activity rv_res label \n')
+                #Perform KS-test to check if the residuals are consistent with a Gaussian distribution
+                #ks_statistic, p_value = normality_test(rv_presiduals,rv_errs_jit[idx],f)
+                for k in range(len(local_time[idx])):
+                    f.write(f'{local_time[idx][k]} {rv_no_offset[idx][k]} {local_errs[idx][k]}  {rv_errs_jit[idx][k]} {rv_noplanets[idx][k]} {rv_presiduals[k]} {telescopes_labels[tlab[idx][k]]}  \n')
+            else:
+                f.write(f'#Time no_offset err jit_err res label \n')
+                #Perform KS-test to check if the residuals are consistent with a Gaussian distribution
+                local_res = rv_no_offset[idx]-m_data[idx]
+                #ks_statistic, p_value = normality_test(local_res,rv_errs_jit[idx],f)
+                for k in range(len(local_time[idx])):
+                    f.write(f'{local_time[idx][k]} {rv_no_offset[idx][k]} {local_errs[idx][k]}  {rv_errs_jit[idx][k]}  {local_res[k]} {telescopes_labels[tlab[idx][k]]}  \n')
+
     #
-    xdata = vec_x
-    ydata = np.asarray(np.concatenate(rv_no_offset))*cfactor
-    edata = np.asarray(np.concatenate(errs_all))*cfactor
-    ejdata = np.asarray(np.concatenate(new_errs_all))
-    res = np.asarray(vec_y)*cfactor
+    fname = f'{outdir}/{star}_timeseries_gp.pdf'
+    print(f'Creating  {fname}')
+    plt.savefig(fname, format='pdf', bbox_inches='tight',dpi=300)
+    plt.savefig(fname[:-3]+'png', format='png', bbox_inches='tight', dpi=300)
+    plt.close()
 
-    if kernel_rv[0:2] == 'MQ' or kernel_rv[0:2] == 'ME' or kernel_rv[0:2] == 'MM' or kernel_rv[0:2] == 'SQ' :
-        ns = int(kernel_rv[2])
-        ts_len = int(len(xdata)/ns)
-        # Create the vector with the data needed in the create_nice_plot function
-        for o in range(0, ns):
-            rv_dvec = [xdata[o*ts_len:(o+1)*ts_len], ydata[o*ts_len:(o+1)*ts_len], edata[o*ts_len:(o+1)*ts_len],
-                       ejdata[o*ts_len:(o+1)*ts_len], res[o*ts_len:(o+1)*ts_len], tlab[o*ts_len:(o+1)*ts_len]]
-            rv_dvecnp = np.asarray(rv_dvec)
-            mvec = plot_vector[o]
-            mvecnp = np.asarray(mvec)
-            np.savetxt(outdir+'/timeseries_model'+str(o) +
-                       '.dat', mvecnp.T, fmt='%8.8f')
-            np.savetxt(outdir+'/timeseries_data'+str(o)+'.dat', rv_dvecnp.T, fmt='%8.8f %8.8f %8.8f %8.8f %8.8f %i',
-                       header='time rv erv jitter rvnoplanet tlab', comments='#')
-            if o == 0:
-                model_labels = ['Planetary signal', 'GP', 'P+GP']
-                mcolors = ['r', 'b', 'k']
-                malpha = [0.7, 0.7, 0.9]
-                fname = outdir+'/'+star+'_rv_timeseries.pdf'
-            else:
-                model_labels = ['GP timeseries'+str(o+1)]
-                mcolors = ['k']
-                malpha = [0.9]
-                fname = outdir+'/'+star+'_timeseries'+str(o+1)+'.pdf'
-            if (len(rv_labels) == 1):
-                plot_labels_rv = [rv_xlabel, 'RV (m/s)', 'Residuals (m/s)']
-            else:
-                plot_labels_rv = [
-                    rv_xlabel[o*ns:(o+1)*ns], rv_labels[o], rv_res[o]]
-            #The mvec[:-1] is to ignore the extra dimension added to create the variance of the P
-            create_nice_plot(mvec[:-1], rv_dvec, plot_labels_rv, model_labels, telescopes_labels, fname, std_model=mvec[-1],
-                             plot_residuals=False, fsx=2*fsx, model_colors=mcolors, model_alpha=malpha,colors=rv_colors)
-    else:
-        rv_dvec = [xdata, ydata, edata, ejdata, res, tlab]
-        rv_dvecnp = np.asarray(rv_dvec)
-        mvecnp = np.asarray(rv_mvec)
-        np.savetxt(outdir+'/timeseries_model_rv.dat', mvecnp.T, fmt='%8.8f')
-        np.savetxt(outdir+'/timeseries_data_rv.dat', rv_dvecnp.T, fmt='%8.8f %8.8f %8.8f %8.8f %8.8f %i',
-                       header='time rv erv jitter rvnoplanet tlab', comments='#')
-        plot_labels_rv = [rv_xlabel, 'RV (m/s)', 'Residuals (m/s)']
-        # Create the RV timeseries plot
-        create_nice_plot(rv_mvec, rv_dvec, plot_labels_rv, model_labels, telescopes_labels, fname,
-                         plot_residuals=False, fsx=2*fsx, model_colors=mcolors, model_alpha=malpha,colors=rv_colors)
+    exec(open('src/gprv_res.py').read())
 
-    # Create residuals file
-    of = open(out_f, 'w')
-    for i in range(0, len(vec_x)):
-        of.write(' %8.8f   %8.8f  %8.8f  %s \n' % (vec_x[i], res[i]*1e-3, vec_z[i], telescopes_labels[tlab[i]]))
+#--------------------------------------------------------------------------------
+#                   Phase folded RV plots
+#--------------------------------------------------------------------------------
 
-    of.close()
+#Create phase-folded plots for all planets
+for k,p in enumerate(plabels[:nplanets]):
 
-    return rv_residuals
+    if not fit_rv[k]: continue
 
-# ===========================================================
-#                RV multi-planet fit
-# ===========================================================
+    plt.figure(1, figsize=(fsx, fsy))
+
+    gs = gridspec.GridSpec(nrows=2, ncols=1, height_ratios=[3,1])
+    gs.update(hspace=0.00)
+    ax0 = plt.subplot(gs[0],rasterized=is_rasterized) #models and data plots
+    ax1 = plt.subplot(gs[1],rasterized=is_rasterized) #residuals
+
+    id0 = dim_lab == 0
+    #We just computed the residuals with no planets or other signals, let us use to create the plots
+    local_rv = np.array(rv_presiduals)
+    local_time = np.array(rv_time)[id0]
+    local_errs = np.array(rv_errs)[id0]
+    local_errs_jit = np.array(rv_errs_jit)[id0]
+    local_tel_labs = np.array(telescopes_labels)[tlab[id0]]
 
 
-def plot_rv_phasefolded():
+    #Compute the model for the current planet
+    xmodel = np.linspace(df_medians[f't0{p}'],df_medians[f't0{p}']+df_medians[f'p{p}'],100)
+    fmodel = compute_rv_model_notrends(xmodel,df_medians,p)
+    #Let us add the signal of the planet we want to plot
+    local_rv += compute_rv_model_notrends(local_time,df_medians,p)
+    #other samples
+    #compute random samples
+    fsamples = []
+    for j in range(n_samples):
+        fsamples.append(compute_rv_model_notrends(xmodel,df_samples.iloc[j],p))
+    xmodel -= df_medians[f't0{p}']
+    pmodel = xmodel/df_medians[f'p{p}']
 
-    cfactor = float(1.e3)
+    #Let us phase fold the data
+    phase = abs(((local_time-df_medians[f't0{p}'])%df_medians[f'p{p}'])/df_medians[f'p{p}'])
 
-    for i in range(0, nplanets):
+    #Store the RV files to recreate the plots
+    frvm = f'{outdir}/{star}{p}_rv_model.dat'
+    with open(frvm,'w') as f:
+        f.write('#Time  RV \n')
+        for j in range(len(pmodel)):
+            f.write(f'{pmodel[j]} {fmodel[j]*1e3} \n')
 
-        # Create the RV fitted model for the planet i
-        rvx = np.arange(t0_val[i], t0_val[i]+P_val[i]*0.999, P_val[i]/4999.)
-        rvy = pti.rv_curve_mp(
-            rvx, 0.0, t0_val[i],  P_val[i], e_val[i], w_val[i], k_val[i],0.0, 0.0)
-        # rvx and rvy are the model timeseries for planet i
+    frvd = f'{outdir}/{star}{p}_rv_data.dat'
+    with open(frvd,'w') as f:
+        f.write('#Time  RV err jit_err residuals  telescope_label\n')
+        for j in range(len(phase)):
+            f.write(f'{phase[j]} {local_rv[j]*1e3} {local_errs[j]*1e3}  {local_errs_jit[j]*1e3} {rv_presiduals[j]*1e3}  {local_tel_labs[j]}\n')
 
-        #Let us compute the shadow region for the RV plots
-        rv_std = []
-        if plot_rv_std:
-            #Compute 1000 random models from the samples
-            rvy_vec = [None]*1000
-            for j in range(1000):
-                my_j = np.random.randint(len(T0_vec[i]))
-                rvy_vec[j] = pti.rv_curve_mp(
-                    rvx, 0.0, T0_vec[i][j],  P_vec[i][j], e_vec[i][j], w_vec[i][j], k_vec[i][j],0.0, 0.0)
-            #Compute the standard deviation of the models sample
-            rv_std = np.std(rvy_vec,axis=0)
-            rv_std *= cfactor
+    for i,t in enumerate(telescopes_labels):
+        ix = i == np.array(tlab)[id0]
+        if all(ix == False): continue
+        #Models
+        ax0.errorbar(phase[ix],local_rv[ix]*1e3,local_errs_jit[ix]*1e3,fmt='.',color=rv_colors[i],alpha=0.5)
+        ax0.errorbar(phase[ix],local_rv[ix]*1e3,local_errs[ix]*1e3,mfc='w',fmt=mark[i],color=rv_colors[i],label=t,zorder=5)
+        #Residuals
+        ax1.errorbar(phase[ix],rv_presiduals[ix]*1e3,local_errs_jit[ix]*1e3,fmt='.',color=rv_colors[i],alpha=0.5)
+        ax1.errorbar(phase[ix],rv_presiduals[ix]*1e3,local_errs[ix]*1e3,mfc='w',fmt=mark[i],color=rv_colors[i],zorder=5)
 
+    ax0.plot(pmodel,fmodel*1e3,'k',zorder=5)
+    for i in range(n_samples):
+        ax0.plot(pmodel,fsamples[i]*1e3,'k',alpha=0.05,lw=0.5,zorder=4)
 
+    ax0.set_xlim(0,1)
+    if is_rv_legend: ax0.legend()
+    ax0.set_xticks([])
+    ax0.set_ylabel(r'RV ($\mathrm{m\,s^{-1}}$)')
 
-        # Now it is time to remove the planets j != i from the data
-        rv_pi = pti.rv_curve_mp(
-            rv_time, 0.0, t0_val[i], P_val[i], e_val[i], w_val[i], k_val[i], 0., 0.)
-        # This variable has all the planets
-        rv_pall = pti.rv_curve_mp(
-            rv_time, 0.0, t0_val, P_val, e_val, w_val, k_val, 0.0, 0.0)
+    ax1.set_xlim(0,1)
+    ax1.set_xlabel('Phase')
+    ax1.set_ylabel(r'Residuals ($\mathrm{m\,s^{-1}}$)')
 
-        # Let us remove all the signals from the data
-        res = np.zeros(shape=len(rv_vals))
-        for m in range(0, len(rv_vals)):
-            res[m] = rv_vals[m] - v_val[tlab[m]] - rv_pall[m]  \
-                - alpha_val*(rv_time[m] - t0_val[0]) - \
-                beta_val*(rv_time[m] - t0_val[0])**2
-        # Let us add the  signal of the planet i to the data
-        rv_planet_i = res + rv_pi
+    fname = f'{outdir}/{star}{p}_rv.pdf'
+    print(f'Creating  {fname}')
+    plt.savefig(fname, format='pdf', bbox_inches='tight',dpi=300)
+    plt.savefig(fname[:-3]+'png', format='png', bbox_inches='tight', dpi=300)
+    plt.close()
 
-        # Did we fit for a GP?
-        evec = np.asarray(rv_errs)
-        if kernel_rv[0:2] != 'No':
-            xvec = rv_time
-            yvec = res
-            kernel_val, C = pti.pred_gp(
-                kernel_rv, pk_rv, xvec, yvec, evec, xvec, jrv, jrvlab)
-            res = res - kernel_val
-            rv_planet_i = rv_planet_i - kernel_val
-
-        rvy = np.asarray(rvy)*cfactor
-        res = np.asarray(res)*cfactor
-        rv_planet_i = np.asarray(rv_planet_i)*cfactor
-        evec = evec*cfactor
-        ejvec = np.concatenate(new_errs_all)
-
-        p_rv = scale_period(rvx, t0_val[i], P_val[i])
-        p_all = scale_period(rv_time, t0_val[i], P_val[i])
-
-        fname = outdir+'/'+star+plabels[i]+'_rv.pdf'
-#      plot_rv_fancy([p_rv,rvy,p_all,rv_planet_i,evec,ejvec,res,tlab],fname)
-        rv_dvec = np.array([p_all, rv_planet_i, evec, ejvec, res, tlab])
-        tellabs = telescopes_labels
-        if kernel_rv[0:2] == 'MQ' or kernel_rv[0:2] == 'ME' or kernel_rv[0:2] == 'MM' or kernel_rv[0:2] == 'SQ':
-            ns = int(kernel_rv[2])
-            nd = int(len(p_all)/ns)
-            rv_dvec = [p_all[0:nd], rv_planet_i[0:nd],
-                       evec[0:nd], ejvec[0:nd], res[0:nd], tlab[0:nd]]
-            tellabs = [0]
-            tellabs = telescopes_labels[0:int((len(telescopes_labels))/ns)]
-        rv_dvec = np.array(rv_dvec)
-        rv_mvec = np.array([p_rv, rvy])
-        plot_labels_rv = ['Orbital phase', 'RV (m/s)', 'Residuals (m/s)']
-        model_labels = ['']
-        np.savetxt(fname[:-4]+'-data.dat',rv_dvec.T,header='phase rv_planet'+plabels[i]+'(m/s) eRV(m/s)  eRV_with_jitter(m/s)  residuals(m/s)   instrument',
-        fmt='%4.8f  %4.8f  %4.8f  %4.8f  %4.8f  %i')
-        np.savetxt(fname[:-4]+'-model.dat',rv_mvec.T,header='phase rv_planet'+plabels[i]+'(m/s)',fmt='%4.8f  %8.8f')
-        create_nice_plot(rv_mvec, rv_dvec, plot_labels_rv,
-                         model_labels, tellabs, fname,colors=rv_colors,std_model=rv_std)

@@ -1,7 +1,7 @@
 !--------------------------------------------------------------------------------
 subroutine mcmc_stretch_move(                &
            x_rv,y_rv,x_tr,y_tr,e_rv,e_tr,    &
-           rvlab,jrvlab,trlab,jtrlab,        &
+           rvlab,jrvlab,dim_lab, trlab,jtrlab,&
            flags, total_fit_flag,            &
            prior_flags, prior_vals,          &
            kernels,                          &
@@ -22,7 +22,7 @@ implicit none
   integer :: nwalks, maxi, thin_factor, nconv
   real(kind=mireal), intent(in), dimension(0:size_rv-1) :: x_rv, y_rv, e_rv
   real(kind=mireal), intent(in), dimension(0:size_tr-1) :: x_tr, y_tr, e_tr
-  integer, intent(in), dimension(0:size_rv-1) :: rvlab, jrvlab
+  integer, intent(in), dimension(0:size_rv-1) :: rvlab, jrvlab, dim_lab
   integer, intent(in), dimension(0:size_tr-1) :: trlab, jtrlab
   real(kind=mireal), intent(in), dimension(0:2*npars - 1):: prior_vals
   real(kind=mireal), intent(in) ::  model_double(0:nmodel_double-1)
@@ -88,9 +88,11 @@ implicit none
       log_prior_old(nk) = sum( log(priors_old(nk,:) ) )
 
       call get_loglike(x_rv,y_rv,x_tr,y_tr,e_rv,e_tr, &
-           rvlab,jrvlab,trlab,jtrlab,total_fit_flag,flags,kernels,&
+           rvlab,jrvlab,dim_lab,trlab,jtrlab,total_fit_flag,flags,kernels,&
            pars_old(nk,:),model_int,model_double,nmodel_int,nmodel_double,&
            npars,log_likelihood_old(nk),chi2_old_rv(nk),chi2_old_tr(nk),size_rv,size_tr)
+
+
 
       chi2_old_total(nk) = chi2_old_rv(nk) + chi2_old_tr(nk)
       log_likelihood_old(nk) = log_prior_old(nk) + log_likelihood_old(nk)
@@ -99,6 +101,7 @@ implicit none
 
   end do
   !!$OMP END PARALLEL
+
 
   chi2_red(:) = chi2_old_total(:) / dof
 
@@ -171,10 +174,12 @@ implicit none
 
       if ( is_limit_good ) then !If we are inside the limits, let us calculate chi^2
 
+
       call get_loglike(x_rv,y_rv,x_tr,y_tr,e_rv,e_tr,    &
-           rvlab,jrvlab,trlab,jtrlab,total_fit_flag,flags,kernels,   &
+           rvlab,jrvlab,dim_lab,trlab,jtrlab,total_fit_flag,flags,kernels,   &
            pars_new(nk,:),model_int,model_double,nmodel_int,nmodel_double,            &
            npars,log_likelihood_new(nk),chi2_new_rv(nk),chi2_new_tr(nk),size_rv,size_tr)
+
 
       chi2_new_total(nk) = chi2_new_rv(nk) + chi2_new_tr(nk)
 
@@ -270,7 +275,7 @@ implicit none
 
   do n = 0, nconv - 1
     do nk = 0, nwalks - 1
-      write(101,*) n, loglike_chains(nk,n), chi2_rv_chains(nk,n),chi2_tr_chains(nk,n), pars_chains(nk,:,n)
+      write(101,*) n,nk,loglike_chains(nk,n), pars_chains(nk,:,n)
     end do
   end do
 

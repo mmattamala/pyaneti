@@ -113,15 +113,18 @@ implicit none
     !calculate the eccentric anomaly
     !Using Newthon-Raphson algorithm
     f(:) = ta(:) - e * sin(ta(:)) - ma(:)
+
+    ! Initialize iteration counts
     n = 0
 
-    do i = 0, dt-1
-      do while ( abs(f(i)) > fmin .and. n < imax )
-        f(i)   = ta(i) - e * sin(ta(i)) - ma(i)
-        df(i)  = uno - e * cos(ta(i))
-        ta(i)  = ta(i) - f(i) / df(i)
+    ! Newton-Raphson iteration with WHERE statement
+    do while (any(abs(f) > fmin) .and. n < imax )
+        where (abs(f) > fmin .and. n < imax)
+            f = ta - e * sin(ta) - ma
+            df = uno - e * cos(ta)
+            ta = ta - f / df
+        end where
         n = n + 1
-      end do
     end do
 
     if ( n > imax ) then !This should never happen!
@@ -278,9 +281,8 @@ implicit none
   real(kind=mireal), intent(in) :: q1(0:nq-1), q2(0:nq-1)
   real(kind=mireal), intent(out) :: u1(0:nq-1), u2(0:nq-1)
 
-  u1 = sqrt(q1)
-  u2 = u1*(1.d0 - 2.d0 *q2)
-  u1 = 2.d0*u1*q2
+  u2 = sqrt(q1)*(1.d0 - 2.d0 *q2)
+  u1 = 2.d0*sqrt(q1)*q2
 
 end subroutine
 
@@ -382,34 +384,6 @@ implicit none
   write(*,*) '=================================='
 
 end subroutine
-
-subroutine uniform_chains(pars,npars,wtf,lims,pars_out)
-use constants
-implicit none
-
-  integer, intent(in) :: npars
-  integer, intent(in), dimension(0:npars-1) :: wtf
-  real(kind=mireal), intent(in), dimension(0:2*npars-1) :: lims
-  real(kind=mireal), intent(in), dimension(0:npars-1) :: pars
-  real(kind=mireal), intent(out), dimension(0:npars-1) :: pars_out
-!Local
-  integer :: n, j
-  real(kind=mireal) :: r_real
-
-  j = 0
-  do n = 0,  npars - 1
-    if ( wtf(n) == 0 ) then
-      pars_out(n) = pars(n)
-    else
-      call random_number(r_real)
-      pars_out(n) = lims(j+1) - lims(j)
-      pars_out(n) = lims(j) + r_real * pars_out(n)
-    end if
-    j = j + 2
-  end do
-
-end subroutine
-
 
 subroutine rhotoa13(rho,P,a,n)
 use constants

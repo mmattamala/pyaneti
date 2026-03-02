@@ -5,8 +5,8 @@
 # -----------------------------------------------------------
 
 # Load libraries
-from __future__ import print_function, division, absolute_import
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
 import sys
@@ -22,7 +22,7 @@ import pyaneti as pti  # FORTRAN module
 star = str(sys.argv[1])
 
 # Create path to the input_fit.py file
-inf_name = 'inpy/'+star+'/input_fit.py'
+inf_name = f'inpy/{star}/input_fit.py'
 
 # Did you create an input_fit.py file?
 if (not os.path.isfile(inf_name)):
@@ -38,29 +38,26 @@ exec(open('src/default.py').read())
 # Read input file
 exec(open(inf_name).read())
 
-# Prepare data
-exec(open('src/prepare_data.py').read())
-
 # Create ouput directory
-outdir = outdir + star + '_out'
+outdir = f'{outdir}{star}_out'
 if not os.path.exists(outdir):
     os.makedirs(outdir)
 
-# Obtain smart priors based on iput data
-if is_smart_priors:
-    smart_priors()
-
-print_init()
+#Read the data and prepare all the variables
+exec(open('src/prepare_data.py').read())
 
 # -------------------------------------------------------------
-#                   FITTING ROUTINES
+#                   SAMPLING ROUTINES
 # -------------------------------------------------------------
 
-joint_fit()
+exec(open('src/samplers.py').read())
 
 # -------------------------------------------------------------
-#             	PRINT AND PLOT ROUTINES
+#               PRINT AND PLOT ROUTINES
 # -------------------------------------------------------------
+
+# Print the values
+exec(open('src/print_values.py').read())
 
 exec(open('src/output.py').read())
 

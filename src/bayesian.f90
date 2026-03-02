@@ -1,5 +1,5 @@
 subroutine get_loglike(x_rv,y_rv,x_tr,y_tr,e_rv,e_tr, &
-           rvlab,jrvlab,trlab,jtrlab,tff,flags,kernels,&
+           rvlab,jrvlab,dim_lab,trlab,jtrlab,tff,flags,kernels,&
            pars,model_int,model_double,nmodel_int,nmodel_double,&
            npars,loglike,chi2_rv,chi2_tr,size_rv,size_tr)
 use constants
@@ -9,7 +9,7 @@ implicit none
   integer, intent(in) :: size_rv, size_tr, npars, nmodel_int, nmodel_double !size of RV and LC data
   real(kind=mireal), intent(in), dimension(0:size_rv-1) :: x_rv, y_rv, e_rv
   real(kind=mireal), intent(in), dimension(0:size_tr-1) :: x_tr, y_tr, e_tr
-  integer, intent(in), dimension(0:size_rv-1) :: rvlab, jrvlab
+  integer, intent(in), dimension(0:size_rv-1) :: rvlab, jrvlab, dim_lab
   integer, intent(in), dimension(0:size_tr-1) :: trlab, jtrlab
   character(len=6), intent(in) :: kernels
   !npars = 7*npl + (npl + LDC)*nbands + noffsets + njitter + ntrends
@@ -55,15 +55,16 @@ implicit none
                            t_cad,n_cad,pars,chi2_rv,chi2_tr,log_errs,npars,&
                            npl,ntels,nbands,nradius,nldc,njrv,njtr,size_rv,size_tr)
 
-    chi2_total = chi2_rv + chi2_tr
+   chi2_total = chi2_rv + chi2_tr
 
     loglike = log_errs - 0.5d0 * chi2_total
+
 
  else
 
   !We are working with correlated noise, let's do GP!
-   call get_total_GP_likelihood(x_rv,y_rv,x_tr,y_tr,e_rv,e_tr, &
-        rvlab,jrvlab,trlab,jtrlab,tff,flags,t_cad,n_cad,pars,kernels, &
+   call get_total_GP_likelihood(pars,x_rv,y_rv,e_rv,x_tr,y_tr,e_tr, &
+        rvlab,jrvlab,dim_lab,trlab,jtrlab,tff,flags,t_cad,n_cad,kernels, &
         chi2_rv,chi2_tr,loglike,npars,npl,ntels,nbands,nradius,nldc,njrv,njtr,np_rv,&
         np_tr,size_rv,size_tr)
 
@@ -75,9 +76,9 @@ end subroutine
 !--------------------------------------------------------------------------------------
 !This subroutine calculates the Likelihood for correlated noise in RV and/or TR data
 !--------------------------------------------------------------------------------------
-subroutine get_total_GP_likelihood(x_rv,y_rv,x_tr,y_tr,e_rv,e_tr, &
-           rvlab,jrvlab,trlab,jtrlab,tff,flags,t_cad,n_cad,pars,kernels, &
-       chi2_rv,chi2_tr,log_like_total,npars,npl,ntels,nbands,nradius,nldc,njrv,njtr,&
+subroutine get_total_GP_likelihood(pars,x_rv,y_rv,e_rv,x_tr,y_tr,e_tr, &
+           rvlab,jrvlab,dim_lab,trlab,jtrlab,tff,flags,t_cad,n_cad,kernels, &
+           chi2_rv,chi2_tr,log_like_total,npars,npl,ntels,nbands,nradius,nldc,njrv,njtr,&
            np_rv,np_tr,size_rv,size_tr)
 use constants
 implicit none
@@ -87,7 +88,7 @@ implicit none
   integer, intent(in) :: n_cad(0:nbands-1)
   real(kind=mireal), intent(in), dimension(0:size_rv-1) :: x_rv, y_rv, e_rv
   real(kind=mireal), intent(in), dimension(0:size_tr-1) :: x_tr, y_tr, e_tr
-  integer, intent(in), dimension(0:size_rv-1) :: rvlab, jrvlab
+  integer, intent(in), dimension(0:size_rv-1) :: rvlab, jrvlab, dim_lab
   integer, intent(in), dimension(0:size_tr-1) :: trlab, jtrlab
   character(len=6), intent(in) :: kernels
 !pars = T0, P, e, w, b, a/R*, Rp/R*, K -> for each planet
@@ -106,11 +107,13 @@ implicit none
   real(kind=mireal), dimension(0:size_tr-1) :: res_tr
   real(kind=mireal), dimension(0:np_rv-1) :: pk_rv
   real(kind=mireal), dimension(0:np_tr-1) :: pk_tr
+  real(kind=mireal), dimension(:), allocatable :: x_rv_s, y_rv_s, res_rv_s
+  integer, dimension(:), allocatable :: dim_lab_s, rvlab_s
   real(kind=mireal) :: log_errs, nll_rv, nll_tr
-  logical :: flag_rv(0:3), flag_tr(0:3)
+  logical :: flag_rv(0:3), flag_tr(0:3), mask_dim(0:size_rv-1)
   integer :: i, j, mk
   character(len=3) :: kernel_rv, kernel_tr
-  integer :: srp, sldc, srv, sjitrv, sjittr, strends, skrv, sktr
+  integer :: srp, sldc, srv, sjitrv, sjittr, strends, skrv, sktr, d0size
 
   srp = 7*npl                !start of planet radius
   sldc = srp + npl*nradius    !start of LDC
@@ -168,21 +171,29 @@ implicit none
       !Solution seen at https://stackoverflow.com/questions/9900417/character-to-integer-conversion-in-fortran
       read(kernel_rv(3:3),'(i1)') mk
 
-      !This is the V. Rajpaul Framework
-      !Find the residuals of the RV time-series, this takes into account all the modelled planets
-      !And all the RV offsets
       res_rv = 0.0
-      call find_res_rv(x_rv(0:size_rv/mk-1),y_rv(0:size_rv/mk-1),rvlab(0:size_rv/mk-1),&
-                     pars_rv,flag_rv,res_rv(0:size_rv/mk-1),size_rv/mk,ntels,npl)
-      !Find the residuals of the Activity indicators time-series, this takes into account aonly offsets
-      do i = 1, mk - 1
-          res_rv(i*size_rv/mk:(i+1)*size_rv/mk-1) = y_rv(i*size_rv/mk:(i+1)*size_rv/mk-1) &
-                                                          - pars(srv+rvlab(i*size_rv/mk:(i+1)*size_rv/mk-1))
 
-      end do
+      !Let us compute the residuals of the planetary dimensions
+      !Let us extract the elements where we will need to compute residuals asusming keplerians
+      mask_dim = dim_lab==0
+      d0size = count(mask_dim)
+      allocate(x_rv_s(0:d0size-1), y_rv_s(0:d0size-1),rvlab_s(0:d0size-1), res_rv_s(0:d0size-1))
+      x_rv_s = PACK(x_rv,mask_dim)
+      y_rv_s = PACK(y_rv,mask_dim)
+      rvlab_s = PACK(rvlab,mask_dim)
+      !compute the residuals of the subset of data
+      call find_res_rv(x_rv_s,y_rv_s,rvlab_s,pars_rv,flag_rv,res_rv_s,d0size,ntels,npl)
+      !Fill the elemets of res_rv that correspond to the RVs with the computed res_rv_s
+      res_rv = UNPACK(res_rv_s,mask_dim,res_rv)
+
+      !Of course, the activity indicators (dim != 0) do not have a planet, so let's add an offset to this only
+      where ( .not. mask_dim) res_rv = y_rv - pars(srv+rvlab)
+
+      !deallocate the memory
+      deallocate(x_rv_s, y_rv_s, rvlab_s, res_rv_s)
 
       !Compute the log likelihood using the multi-dimensional GP Regression
-      call NLL_GP(pk_rv,kernel_rv,x_rv,res_rv,e_rv,jrv,jrvlab,nll_rv,chi2_rv,np_rv,size_rv,njrv)
+      call NLL_GP_multigp(pk_rv,kernel_rv,x_rv,res_rv,e_rv,jrv,jrvlab,dim_lab,nll_rv,chi2_rv,np_rv,size_rv,njrv)
 
     else
 
@@ -222,6 +233,7 @@ implicit none
     nll_tr = 0.0
 
   end if
+
 
   log_like_total = nll_rv + nll_tr
 
@@ -456,7 +468,7 @@ implicit none
     if ( fit_pars(j) == 'u' ) then
       call uniform_prior(lims(2*j),lims(2*j+1),pars_in(j),priors_out(j))
     else if ( fit_pars(j) == 'f' ) then
-      !nothing
+      priors_out(j) = 1.
     else if ( fit_pars(j) == 'g' ) then
       call gauss_prior(lims(2*j),lims(2*j+1),pars_in(j),priors_out(j))
     else if ( fit_pars(j) == 'j' ) then

@@ -47,7 +47,7 @@ implicit none
 !
 
   !Added systemic velocity and linear and quadratic trends
-  rv(:) = rv0 + (t(:)-t0(0))*alpha + (t(:)-t0(0))**2*beta
+  rv(:) = rv0 + (t(:)-t(0))*alpha + (t(:)-t(0))**2*beta
 
   !Now add the planet influence on the star
   !each i is for a different planet
@@ -107,7 +107,9 @@ implicit none
   rv0(:) = params(7:6+nt,0)
 
   if ( flag(0) ) P(:) = 1.d1**params(1,:)
-  if ( flag(1) ) call ewto(e,w,e,w,npl)
+  if (flag(1)) then
+    if ( any(e > small) .or. any(w > small) ) call ewto(e,w,e,w,npl)
+  end if
   if ( flag(2) ) k(:) = 1.d1**params(4,:)
   if ( flag(3) ) rv0(:) = 1.d1**params(7:6+nt,0)
 
@@ -132,67 +134,6 @@ implicit none
 
 end subroutine
 
-
-
-!-------------------------------------------------------------------------------
-! This routine calculates the chi square for a RV curve
-! given a set of xd-yd data points
-! same as find_res_rv_py but now the params vector is an array
-! this way is more compatible with python
-!-----------------------------------------------------------
-subroutine find_res_rv_py(xd,yd,tlab,params,rv0,alpha,beta,flag,res,n_data,nt,npl)
-use constants
-implicit none
-
-!In/Out variables
-  integer, intent(in) :: n_data, nt, npl
-  real(kind=mireal), intent(in), dimension(0:n_data-1)  :: xd, yd
-  integer, intent(in), dimension(0:n_data-1) :: tlab
-  real(kind=mireal), intent(in), dimension(0:5*npl-1) :: params
-  real(kind=mireal), intent(in), dimension(0:nt-1)  :: rv0
-  real(kind=mireal), intent(in)  :: alpha, beta
-  logical, intent(in)  :: flag(0:2)
-  real(kind=mireal), intent(out) :: res(0:n_data-1)
-!Local variables
-  integer :: i
-  real(kind=mireal), dimension(0:npl-1) :: t0, P, e, w, k
-  real(kind=mireal), dimension(0:n_data-1) :: model
-  logical :: is_limit_good
-!External function
-  external :: rv_curve_mp
-
-  do i = 1, npl
-    t0(i-1)  = params(1*i-1)
-    P(i-1)   = params(2*i-1)
-    e(i-1)   = params(3*i-1)
-    w(i-1)   = params(4*i-1)
-    k(i-1)   = params(5*i-1)
-  end do
-
-  if ( flag(0) ) P(:) = 1.d1**P(:)
-  if ( flag(1) ) call ewto(e,w,e,w,npl)
-  if ( flag(2) ) k(:) = 1.d1**k(:)
-
-  is_limit_good = .true.
-
-  !Avoid solutions with eccentricities larger than 1 and smaller than zero
-  if ( any( e > 1.d0 ) .or. any(e < 0.d0 ) ) is_limit_good = .false.
-
-  !Avoid solutions with Doppler semi-amplitudes smaller than zero
-  if (  any( k < 0.d0 ) ) is_limit_good = .false.
-
-  if ( is_limit_good ) then
-
-      call rv_curve_mp(xd,0.d0,t0,P,e,w,k,alpha,beta,model,n_data,npl)
-      model(:) = model(:) + rv0(tlab(:))
-      res(:)   =  yd(:) - model(:)
-  else
-
-      res(:) = huge(0.d0)
-
-  end if
-
-end subroutine
 
 !-------------------------------------------------------------------------------
 ! This routine calculates the chi square for a RV curve

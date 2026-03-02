@@ -7,11 +7,12 @@
 
 fname_rv = ['2inst_data.dat']
 
-thin_factor = 10
+thin_factor = 1
 niter = 500
 nchains = 100
 
 method = 'mcmc'
+#method = 'emcee'
 #method = 'plot'
 
 plot_rv_std = True
