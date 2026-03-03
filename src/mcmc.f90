@@ -106,15 +106,15 @@ implicit none
   chi2_red(:) = chi2_old_total(:) / dof
 
   !Print the initial cofiguration
-  print *, ''
-  print *, 'STARTING MCMC CALCULATION'
-  if ( total_fit_flag(0) ) &
-  print *, 'RV datapoints  = ', size_rv
-  if ( total_fit_flag(1) ) &
-  print *, 'TR datapoints  = ', size_tr
-  print *, 'No. parameters = ', int(spar)
-  print *, 'dof            = ', int(dof)
-  call print_chain_data(chi2_red,nwalks)
+  !print *, ''
+  print *, 'RUNNING NATIVE MCMC IN PYANETI'
+  !if ( total_fit_flag(0) ) &
+  !print *, 'RV datapoints  = ', size_rv
+  !if ( total_fit_flag(1) ) &
+  !print *, 'TR datapoints  = ', size_tr
+  !print *, 'No. parameters = ', int(spar)
+  !print *, 'dof            = ', int(dof)
+  !call print_chain_data(chi2_red,nwalks)
 
   !Initialize the values
   j = 1
@@ -125,7 +125,7 @@ implicit none
   inverted = (/ 1 , 0 /)
 
   !The infinite cycle starts!
-  print *, 'STARTING MCMC SAMPLING!'
+  !print *, 'STARTING MCMC SAMPLING!'
   do while ( continua )
 
     !Creating the random variables
@@ -226,11 +226,11 @@ implicit none
       if ( n == nconv ) then
         !Perform G-R test
         n = 0 !reinitilize n
-        call print_chain_data(chi2_red,nwalks)
+        !call print_chain_data(chi2_red,nwalks)
         print *, '=================================='
         print *, '     PERFOMING GELMAN-RUBIN'
         print *, '      TEST FOR CONVERGENCE'
-        print *, '=================================='
+        !print *, '=================================='
         !Check convergence for all the parameters
         is_cvg = .true.
         do o = 0, npars-1
@@ -243,12 +243,12 @@ implicit none
         if ( j < thin_factor*nconv + 1 ) is_cvg = .False.
 
         if ( .not. is_cvg  ) then
-          print *, '=================================='
+          !print *, '=================================='
           print *, 'CHAINS HAVE NOT CONVERGED YET!'
           print *,  nconv*thin_factor,' ITERATIONS MORE!'
           print *, '=================================='
         else
-          print *, '=================================='
+          !print *, '=================================='
           print *, '      CHAINS HAVE CONVERGED'
           print *, '=================================='
           print *, '   CREATING OUTPUT DATA FILES'

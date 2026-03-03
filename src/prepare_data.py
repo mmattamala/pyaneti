@@ -608,7 +608,7 @@ units = []
 elab_unit = ''  # Eccentricity has no unit
 wlab_unit = 'radians'  # Argument of periastron in radians
 ilab_unit = 'radians'  # Inclination in radians
-klab_unit = 'm/s'  # RV semi-amplitude in m/s
+klab_unit = 'km/s'  # RV semi-amplitude in km/s
 alab_unit = ''  # Scaled semi-major axis, no unit
 
 if is_ew:

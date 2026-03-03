@@ -49,9 +49,12 @@ for i,planet in enumerate(plabels[:nplanets]):
     # Logarithmic transformation of the semi-amplitude K
     if is_log_k:
         df[f'k{planet}'] = 10.0 ** df[f'k{planet}']
+        units.append(['km/s'])
+
     #Let us transform the doppler semi-amplitude to meters per second
-    #df[f'k{planet}'] *= 1e3
-    #units.append(['km/s'])
+    df[f'k{planet}_ms'] = df[f'k{planet}']*1e3
+    units.append(['m/s'])
+
 
     # Conversion of eccentricity and argument of periastron if combined
     if is_ew:
@@ -179,15 +182,6 @@ for i,planet in enumerate(plabels[:nplanets]):
 
     #Values that can only be computed for transiting and RV planets
     if fit_tr[i] and fit_rv[i]:
-
-        ## Jeans escape parameter (Fossati et al., 2017, A&A, 598, A90)
-        #df[f'jsp{planet}'] = (
-        #    k_btz * df[f'Teq{planet}'] * S_radius_cgs * df[radius_name]
-        #)
-        #df[f'jsp{planet}'] = (
-        #    S_GM_cgs * df[f'mp{planet}'] * m_hyd / df[f'jsp{planet}']
-        #)
-        #units.append(['Jeans Scape Parameter (Fossati et al 2017)'])
 
         # Estimate planet density
         df[f'pden{planet}'] = df[f'mp{planet}'] / df[radius_name] ** 3  # in solar units
