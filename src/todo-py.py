@@ -23,8 +23,115 @@ import sys
 # computes the planet mass times sin(i)
 # -----------------------------------------------------------
 
+def planet_mass(mstar, k, P, ecc, i):
+    # Broadcast/scalar handling: work with 1d arrays internally
+    mstar_a = np.atleast_1d(mstar).astype(float)
+    k_a     = np.atleast_1d(k).astype(float)
+    P_a     = np.atleast_1d(P).astype(float)
+    ecc_a   = np.atleast_1d(ecc).astype(float)
+    inc_a   = np.atleast_1d(i).astype(float)   # avoid shadowing name i
 
-def planet_mass(mstar, k, P, ecc,i):
+    # Convert P to seconds (work on a copy)
+    P_s = P_a * 24.0 * 3600.0  # s
+
+    # small-planet analytic approximation used as initial guess
+    unoe = np.sqrt(1.0 - ecc_a * ecc_a)
+    # note: S_GM_SI ~ G * M_sun (SI); mstar is in solar masses so keep consistency:
+    # mstar**(2/3.) here expects solar-mass units scaled with S_GM_SI usage below,
+    # we will solve in *solar mass units* consistently to preserve original spirit:
+    # compute m_p*sin i (in solar mass units) approx:
+    # convert factor: (2*pi*S_GM_SI / P)^{1/3} is SI; to keep units consistent we will use SI -> solar mass later
+    # To keep minimal changes, follow original algebra but be careful in Newton below.
+    # Compute an initial m_p*sin i in SI-kg units:
+    # mpsin_si = k * (2*pi*S_GM_SI/P_s)**(-1/3) * (mstar_a * M_SUN)**(2/3) * unoe
+    mpsin_si = k_a * (2.0 * np.pi * S_GM_SI / P_s)**(-1.0/3.0) * (mstar_a**(2.0/3.0)) * unoe
+
+    # convert mpsin_si (which currently uses S_GM_SI with mstar in solar units) into solar-mass units:
+    # since S_GM_SI = G * M_sun, the algebra above returns mpsin in units of solar masses already
+    # (this matches the original code expectation). So we can treat mpsin as solar-mass units:
+    mpsin = mpsin_si
+
+    # initial mp guess (solar mass units) : divide by sin(i) unless sini==0
+    sini = np.sin(inc_a)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        mp = mpsin / sini
+
+    # prepare constants for exact mass-function solve:
+    # mass function RHS (solar-mass units): mf = (P * K^3 * (1-e^2)^{3/2}) / (2*pi*S_GM_SI)
+    # Note: with S_GM_SI defined as G*M_sun and mstar in solar units the units are consistent with mp in solar units.
+    mf = (P_s * k_a**3 * unoe**3) / (2.0 * np.pi * S_GM_SI)
+
+    # elementwise Newton-Raphson to solve:
+    #   F(m) = (m^3 * sin^3 i) / (mstar + m)^2 - mf = 0
+    # derivative:
+    #   dF/dm = sin^3 i * m^2 * (3*mstar + m) / (mstar + m)^3
+    tol = 1e-8
+    max_iter = 200
+
+    # ensure mp array has same shape and is writable
+    mp = np.array(mp, dtype=float, copy=True)
+    mstar_a = np.array(mstar_a, dtype=float, copy=False)
+
+    # loop over elements (small arrays expected in typical usage)
+    for idx in range(mp.size):
+        # local values (solar-mass units)
+        mstar_i = mstar_a.flat[idx]
+        mp_i = mp.flat[idx]
+        mf_i = mf.flat[idx]
+        s_i = sini.flat[idx]
+        s3 = s_i**3
+
+        # invalid mf or zero sine => cannot solve, leave mp as NaN
+        if not np.isfinite(mf_i) or mf_i <= 0 or (s_i == 0.0):
+            mp.flat[idx] = np.nan
+            continue
+
+        # Newton iterations
+        converged = False
+        for it in range(max_iter):
+            denom = (mstar_i + mp_i)
+            if denom <= 0.0:
+                mp_i = np.nan
+                break
+
+            F = (s3 * mp_i**3) / (denom**2) - mf_i
+            # stable derivative
+            dF = s3 * mp_i**2 * (3.0 * mstar_i + mp_i) / (denom**3)
+
+            # safeguard small/zero derivative
+            if not np.isfinite(dF) or dF == 0.0:
+                break
+
+            delta = F / dF
+            mp_new = mp_i - delta
+
+            # damp if step leads to negative mass or NaN
+            if not np.isfinite(mp_new) or mp_new <= 0.0:
+                mp_new = mp_i - 0.5 * delta
+
+            # check convergence (relative)
+            if np.abs(mp_new - mp_i) < tol * max(1.0, mp_i):
+                mp_i = mp_new
+                converged = True
+                break
+
+            mp_i = mp_new
+
+        mp.flat[idx] = mp_i
+
+        # if not converged and mp_i is nan or not finite, keep initial approx (mpsin/sin i)
+        if (not converged) or (not np.isfinite(mp_i)):
+            # fallback: use small-planet approx (mpsin/sin i)
+            # ensure we don't divide by zero (s_i already checked)
+            mp.flat[idx] = (mpsin.flat[idx] / s_i) if s_i != 0.0 else np.nan
+
+    # Return shape handling: if original inputs were scalars, return scalar
+    if np.ndim(mstar) == 0 and np.ndim(k) == 0 and np.ndim(P) == 0 and np.ndim(ecc) == 0 and np.ndim(i) == 0:
+        return float(mp[0])
+    return mp
+
+def planet_mass_old(mstar, k, P, ecc,i):
+
 
     mstar = np.array(mstar)
     k = np.array(k)
