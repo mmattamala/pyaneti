@@ -1,3 +1,52 @@
+# -------------------------------------------------------------------------
+# Multi-dimensional GP input file format for pyaneti
+# -------------------------------------------------------------------------
+#
+# This file MUST contain exactly 6 columns with the following order:
+#
+# 1) time
+# 2) value
+# 3) value_error
+# 4) offset_label
+# 5) jitter_label
+# 6) dimension_label
+#
+# Column description:
+#
+# time:
+#   Time of observation (days).
+#
+# value:
+#   Measured observable (e.g., RV in m/s, activity indicator, photometry, etc.).
+#
+# value_error:
+#   1-sigma uncertainty of the measurement.
+#
+# offset_label:
+#   Defines which systemic offset (v0) the point belongs to.
+#   Points with the same offset_label share the same zero-point.
+#
+# jitter_label:
+#   Defines which jitter term (additional white noise) the point belongs to.
+#   Points with the same jitter_label share the same jitter parameter.
+#
+# dimension_label:
+#   Defines which GP dimension the point belongs to.
+#   All points with the same dimension_label are treated as one time-series
+#   in the multi-dimensional GP (MQX) framework.
+#
+# IMPORTANT:
+#   The number of unique dimension_label entries must match the kernel:
+#     MQ1 -> 1 dimension
+#     MQ2 -> 2 dimensions
+#     MQ3 -> 3 dimensions
+#     ...
+#
+# Example (MQ2 case):
+#   RV measurements      -> dimension_label = rv_serval
+#   NGTS photometry      -> dimension_label = ngts
+#
+# -------------------------------------------------------------------------
 10218.692457999998 -0.17885582426626714 0.0015032479671425083 rv_G9 rv_G9 rv  
 10219.863242 -0.26549960675856643 0.0017289286165356116 rv_G9 rv_G9 rv  
 10220.738549000002 -0.24249794936102217 0.002471265422576974 rv_G9 rv_G9 rv  
