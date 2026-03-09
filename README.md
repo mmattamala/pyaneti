@@ -5,8 +5,8 @@
 # __pyaneti__*
 *From the Italian word _pianeti_, which means planets
 
-#### email:  oscar.barragan_at_physics.ox.ac.uk
-#### Updated November 2021
+#### email:  oscar.barragan_at_warwick.ac.uk
+#### Last update: March 2026
 
 ## Paper I
 ### Written by Barragán O., Gandolfi D. & Antoniciello G.
@@ -109,12 +109,12 @@ archivePrefix = {arXiv},
 
 **If you have any comments, requests, suggestions or just need any help, please don't think twice, just contact us!**
 
-#### Warning: This code is under developement and it may contain bugs. If you find something please contact us at oscar.barragan_at_physics.ox.ac.uk
+#### Warning: This code is under developement and it may contain bugs. If you find something, please contact us at oscar.barragan_at_warwick.ac.uk
 
 ## Acknowledgements
 * Hannu Parviainen, thank you for helping us to interpret the first result of the PDF of the MCMC chains. We learned a lot from you!
-* Salvador Curiel, thank you for  suggestions to parallelize the code.
-* Mabel Valerdi, thank you for being the first _pyaneti_ user, for spotting typos and errors in this document. And thank you much for the awesome idea for pyaneti's logo.
+* Salvador Curiel, thank you for  your suggestions to parallelise the code.
+* Mabel Valerdi, thank you for being the first _pyaneti_ user, for spotting typos and errors in this document. And thank you very much for the awesome idea for pyaneti's logo.
 * Lauren Flor, thank you for testing the code before release.
 * Jorge Prieto-Arranz, thank you for all the suggestions which have helped to improve the code.
 
