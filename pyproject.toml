@@ -13,7 +13,7 @@ name = "pyaneti"
 version = "2.5.2"
 description = "Python wrapper for Pyaneti Fortran core"
 authors = [{ name = "Oscar Barragán" }]
-license = { text = "GPLv3" }
+license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.7"
 dependencies = [

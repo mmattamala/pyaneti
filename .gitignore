@@ -16,3 +16,4 @@ outpy/*
 .buildconfig
 lunas/*
 *.pyc
+*.DS_STORE
