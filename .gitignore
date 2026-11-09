@@ -17,3 +17,7 @@ outpy/*
 lunas/*
 *.pyc
 *.DS_STORE
+
+# pixi environments
+.pixi/*
+!.pixi/config.toml

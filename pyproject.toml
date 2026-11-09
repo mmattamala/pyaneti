@@ -29,3 +29,22 @@ dependencies = [
     "zeus",
 ]
 
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "linux-64"]
+
+[tool.pixi.dependencies]
+python = "3.11.*"
+compilers = "*"
+lapack = "*"
+wheel = "*"
+pip = "*"
+ninja = "*"
+meson = ">=1.0.1"
+meson-python = ">=0.16.0"
+
+[tool.pixi.pypi-dependencies]
+pyaneti = { path = ".", editable = false }
+
+[tool.pixi.tasks]
