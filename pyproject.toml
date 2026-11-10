@@ -43,8 +43,10 @@ pip = "*"
 ninja = "*"
 meson = ">=1.0.1"
 meson-python = ">=0.16.0"
+libopenblas = { version = "*", build = "openmp*" }
 
 [tool.pixi.pypi-dependencies]
 pyaneti = { path = ".", editable = false }
 
 [tool.pixi.tasks]
+pyaneti = "python run_pyaneti.py"
